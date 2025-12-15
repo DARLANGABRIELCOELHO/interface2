@@ -1,237 +1,252 @@
-// app.js - Ponto de entrada principal do sistema
+// app.js - Núcleo principal da aplicação
 
-class Application {
+class SistemaAssistencia {
     constructor() {
         this.currentModule = null;
-        this.modules = new Map();
-        this.isInitialized = false;
-        
-        this.config = {
-            defaultModule: 'dashboard',
-            animationDuration: 300,
-            localStorageKey: 'ifix-app-state'
-        };
+        this.modules = {};
+        this.init();
     }
 
-    async init() {
-        try {
-            console.log('🚀 Sistema iFix - Iniciando...');
-            
-            // Tenta inicializar módulos, mas não para se um falhar
-            await this.initializeModules();
-            
-            this.setupGlobalEvents();
-            this.restoreAppState();
-            this.setupRouting();
-            
-            this.isInitialized = true;
-            console.log('✅ Sistema iFix - Pronto');
-            
-        } catch (error) {
-            console.error('❌ Erro crítico na inicialização:', error);
-            // Mesmo com erro, tentamos liberar a UI para não travar no loading
-        } finally {
-            // GARANTE que o loading vai sumir
-            this.initializeUI();
+    init() {
+        console.log('Sistema de Assistência Técnica iniciando...');
+        
+        // Configura manipuladores de erro
+        this.setupErrorHandling();
+        
+        // Inicializa quando o DOM estiver pronto
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.setup());
+        } else {
+            this.setup();
         }
     }
 
-    async initializeModules() {
-        console.log('📦 Inicializando módulos...');
+    setup() {
+        // Carrega módulos dinamicamente
+        this.loadModules();
         
-        const moduleOrder = [
-            'sidebar',
-            'dashboard',
-            'customers',
-            'serviceOrders',
-            'serviceCatalog',
-            'priceCalculator'
-        ];
-
-        for (const moduleName of moduleOrder) {
-            try {
-                const module = this.getModuleInstance(moduleName);
-                if (!module) {
-                    console.warn(`⚠️ Módulo ${moduleName} não encontrado no window.`);
-                    continue;
-                }
-
-                if (typeof module.init === 'function') {
-                    // Executa init. Se já tiver rodado, o módulo deve tratar a duplicidade.
-                    await Promise.resolve(module.init());
-                }
-
-                this.modules.set(moduleName, module);
-                
-            } catch (error) {
-                console.error(`❌ Erro ao inicializar módulo ${moduleName}:`, error);
-            }
-        }
+        // Configura eventos globais
+        this.setupGlobalEvents();
+        
+        // Inicia com o dashboard
+        this.navigateTo('Dashboard');
+        
+        console.log('Sistema pronto!');
     }
 
-    getModuleInstance(moduleName) {
-        const moduleMap = {
-            'sidebar': window.SidebarModule,
-            'dashboard': window.DashboardModule,
-            'customers': window.CustomersModule,
-            'serviceOrders': window.OrdersModule, // ou ServiceOrdersModule
-            'serviceCatalog': window.CatalogModule, // ou ServiceCatalogModule
-            'priceCalculator': window.CalculatorModule
-        };
-        
-        // Tenta buscar pelo mapa ou direto no window se o nome bater
-        return moduleMap[moduleName] || window[moduleName];
+    loadModules() {
+        // Módulos serão registrados pelo ModuleManager
+        console.log('Aguardando registro dos módulos...');
+    }
+
+    setupErrorHandling() {
+        // Captura erros globais não tratados
+        window.addEventListener('error', (event) => {
+            console.error('Erro global capturado:', event.error);
+            this.showError(`Erro: ${event.message}`);
+        });
+
+        // Captura promessas rejeitadas não tratadas
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Promessa rejeitada não tratada:', event.reason);
+            this.showError(`Erro na promessa: ${event.reason}`);
+        });
     }
 
     setupGlobalEvents() {
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') this.handleEscape();
-        });
-        
-        // Listener para remover loading caso algo externo falhe
-        window.addEventListener('load', () => {
-            document.body.classList.remove('app-loading');
-        });
-    }
-
-    setupRouting() {
-        window.addEventListener('hashchange', () => this.navigateFromHash());
-        if (window.location.hash) {
-            this.navigateFromHash();
-        } else {
-            this.navigate(this.config.defaultModule);
-        }
-    }
-
-    initializeUI() {
-        // Força remoção da classe de loading
-        setTimeout(() => {
-            document.body.classList.remove('app-loading');
-            document.body.classList.add('app-ready');
-            
-            // Força um render do módulo atual se nada apareceu
-            if (!this.currentModule) {
-                 this.navigate(this.config.defaultModule);
+        // Navegação entre módulos
+        document.addEventListener('module:navigate', (event) => {
+            if (event.detail && event.detail.module) {
+                this.navigateTo(event.detail.module);
             }
-        }, 500);
-        
-        this.setupTheme();
-        this.setupNotifications();
+        });
+
+        // Atualização do dashboard
+        document.addEventListener('data:updated', () => {
+            if (this.modules.Dashboard && this.modules.Dashboard.refresh) {
+                this.modules.Dashboard.refresh();
+            }
+        });
+
+        // Logout/limpeza (se implementado)
+        document.addEventListener('system:logout', () => {
+            this.logout();
+        });
     }
 
-    async navigate(moduleName, params = {}) {
+    navigateTo(moduleName) {
+        // Verifica se o módulo existe
+        if (!ModuleManager.exists(moduleName)) {
+            console.error(`Módulo ${moduleName} não encontrado`);
+            this.showError(`Módulo ${moduleName} não disponível`);
+            return;
+        }
+
+        // Atualiza módulo ativo na sidebar
+        if (ModuleManager.exists('Sidebar')) {
+            const sidebar = ModuleManager.get('Sidebar');
+            if (sidebar.setActiveModule) {
+                sidebar.setActiveModule(moduleName);
+            }
+        }
+
+        // Carrega o conteúdo do módulo
+        this.loadModuleContent(moduleName);
+        
+        // Atualiza título da página
+        document.title = `${moduleName} - Sistema Assistência Técnica`;
+        
+        console.log(`Navegado para: ${moduleName}`);
+    }
+
+    loadModuleContent(moduleName) {
+        const module = ModuleManager.get(moduleName);
+        const container = document.getElementById('main-content');
+        
+        if (!container) {
+            console.error('Container principal não encontrado');
+            return;
+        }
+
+        if (!module || !module.render) {
+            container.innerHTML = `
+                <div class="error-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h2>Módulo não disponível</h2>
+                    <p>O módulo ${moduleName} não pôde ser carregado.</p>
+                    <button class="btn btn-primary" onclick="app.navigateTo('Dashboard')">
+                        Voltar para o Dashboard
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
         try {
-            if (!this.modules.has(moduleName)) {
-                // Tenta recuperar se não foi inicializado
-                const module = this.getModuleInstance(moduleName);
-                if (module) {
-                    this.modules.set(moduleName, module);
-                } else {
-                    console.warn(`Módulo ${moduleName} indisponível.`);
-                    if (moduleName !== 'dashboard') this.navigate('dashboard');
-                    return;
-                }
-            }
-
-            if (this.currentModule) {
-                this.hideModule(this.currentModule);
-            }
-
-            this.showModule(moduleName, params);
+            // Limpa conteúdo anterior
+            container.innerHTML = '';
+            
+            // Renderiza o módulo
+            const moduleContainer = document.createElement('div');
+            moduleContainer.id = `${moduleName.toLowerCase()}-view`;
+            moduleContainer.className = 'module-view';
+            container.appendChild(moduleContainer);
+            
+            module.render();
+            
+            // Salva referência ao módulo atual
             this.currentModule = moduleName;
+            this.modules[moduleName] = module;
             
-            // Atualiza Hash sem disparar evento
-            const newHash = `#${moduleName}`;
-            if(window.location.hash !== newHash) {
-                history.pushState(null, null, newHash);
-            }
-
         } catch (error) {
-            console.error(`Erro ao navegar para ${moduleName}:`, error);
+            console.error(`Erro ao carregar módulo ${moduleName}:`, error);
+            container.innerHTML = `
+                <div class="error-state">
+                    <i class="fas fa-bug"></i>
+                    <h2>Erro ao carregar módulo</h2>
+                    <p>${error.message}</p>
+                    <button class="btn btn-primary" onclick="app.navigateTo('Dashboard')">
+                        Voltar para o Dashboard
+                    </button>
+                </style>
+                </div>
+            `;
         }
     }
 
-    showModule(moduleName, params = {}) {
-        const container = document.getElementById(`${moduleName}-view`);
-        if (container) {
-            container.classList.add('active');
-            
-            const module = this.modules.get(moduleName);
-            if (module && typeof module.render === 'function') {
-                module.render();
-            }
-            
-            if (window.SidebarModule) {
-                window.SidebarModule.updateActive(moduleName);
-            }
-        }
-    }
-
-    hideModule(moduleName) {
-        const container = document.getElementById(`${moduleName}-view`);
-        if (container) container.classList.remove('active');
-    }
-
-    navigateFromHash() {
-        const hash = window.location.hash.replace('#', '');
-        if (hash) this.navigate(hash);
-    }
-
-    handleEscape() {
-        const modals = document.querySelectorAll('.modal');
-        modals.forEach(m => m.style.display = 'none');
-        modals.forEach(m => m.classList.remove('active'));
-    }
-
-    setupTheme() {
-        const savedTheme = localStorage.getItem('app-theme') || 'dark';
-        document.body.setAttribute('data-theme', savedTheme);
+    showError(message) {
+        // Cria notificação de erro
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-notification';
+        errorDiv.innerHTML = `
+            <div class="error-content">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>${message}</span>
+                <button class="error-close" onclick="this.parentElement.parentElement.remove()">
+                    &times;
+                </button>
+            </div>
+        `;
         
-        const toggle = document.getElementById('theme-toggle');
-        if (toggle) {
-            toggle.onclick = () => {
-                const current = document.body.getAttribute('data-theme');
-                const next = current === 'dark' ? 'light' : 'dark';
-                document.body.setAttribute('data-theme', next);
-                localStorage.setItem('app-theme', next);
-            };
-        }
-    }
-
-    setupNotifications() {
-        if (!document.getElementById('notifications-container')) {
-            const container = document.createElement('div');
-            container.id = 'notifications-container';
-            container.className = 'notifications';
-            document.body.appendChild(container);
-        }
-    }
-
-    showNotification(message, type = 'info') {
-        const container = document.getElementById('notifications-container');
-        if (!container) return;
+        // Adiciona ao topo da página
+        document.body.appendChild(errorDiv);
         
-        const notif = document.createElement('div');
-        notif.className = `notification notification-${type}`;
-        notif.textContent = message;
-        container.appendChild(notif);
-        
+        // Remove automaticamente após 5 segundos
         setTimeout(() => {
-            notif.remove();
-        }, 4000);
+            if (errorDiv.parentElement) {
+                errorDiv.remove();
+            }
+        }, 5000);
     }
 
-    restoreAppState() {
-        // Implementar restauração se necessário
+    logout() {
+        // Limpa dados sensíveis (se necessário)
+        localStorage.removeItem('user_session');
+        
+        // Redireciona para página de login ou recarrega
+        window.location.reload();
     }
 }
 
-const App = new Application();
+// Estilos CSS para erros
+const errorStyles = document.createElement('style');
+errorStyles.textContent = `
+    .error-state {
+        text-align: center;
+        padding: 50px 20px;
+        color: #666;
+    }
+    
+    .error-state i {
+        font-size: 48px;
+        color: #dc3545;
+        margin-bottom: 20px;
+    }
+    
+    .error-state h2 {
+        color: #dc3545;
+        margin-bottom: 10px;
+    }
+    
+    .error-notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #dc3545;
+        color: white;
+        padding: 15px 20px;
+        border-radius: 5px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 9999;
+        max-width: 400px;
+    }
+    
+    .error-content {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .error-close {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+        margin-left: auto;
+    }
+    
+    .module-view {
+        padding: 20px;
+    }
+`;
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => App.init());
-} else {
-    App.init();
+document.head.appendChild(errorStyles);
+
+// Cria instância global
+window.app = new SistemaAssistencia();
+
+// Exporta para módulos (se suportado)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = SistemaAssistencia;
 }
-
-window.App = App;
