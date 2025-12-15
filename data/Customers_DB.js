@@ -18,3 +18,8 @@ class CustomersDatabase extends ConnectionDB {
 }
 
 const Customers_DB = new CustomersDatabase();
+
+// Expor globalmente
+if (typeof window !== 'undefined') {
+    window.Customers_DB = Customers_DB;
+}

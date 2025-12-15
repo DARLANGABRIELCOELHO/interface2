@@ -1,4 +1,3 @@
-// app.js
 // app.js - Ponto de entrada principal do sistema
 
 class Application {

@@ -24,3 +24,8 @@ class OrdersDatabase extends ConnectionDB {
 }
 
 const Orders_DB = new OrdersDatabase();
+
+// Expor globalmente
+if (typeof window !== 'undefined') {
+    window.Orders_DB = Orders_DB;
+}

@@ -10,7 +10,6 @@ const defaultCatalog = {
     services: [
         "TROCA DE TELA", "TROCA DE BATERIA", "VIDRO TRASEIRO", "FACE ID", "CONECTOR DE CARGA"
     ],
-    // Exemplo reduzido para economizar espaço, a lógica carregará isso
     prices: {
         "IPHONE 11": {
             "TROCA DE TELA": { parcelado: 330.00, avista: 306.90 },
@@ -43,3 +42,8 @@ class CatalogDatabase extends ConnectionDB {
 }
 
 const Catalog_DB = new CatalogDatabase();
+
+// Expor globalmente
+if (typeof window !== 'undefined') {
+    window.Catalog_DB = Catalog_DB;
+}
