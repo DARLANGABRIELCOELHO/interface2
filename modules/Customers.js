@@ -1,216 +1,208 @@
 // modules/Customers.js
 
 const CustomersModule = {
-    // Estado interno do módulo
-    currentView: 'table', // 'table' ou 'card'
-    searchTerm: '',
-    filterField: 'all',
-    sortField: 'createdAt',
-    sortOrder: 'desc',
-
-    // Inicialização do módulo
     init() {
-        console.log('✅ CustomersModule inicializado');
         this.cacheElements();
-        // A renderização real acontece quando o app navega para este módulo
+        // Renderiza apenas se estiver na view ativa ou para pré-carregar
+        console.log('✅ CustomersModule inicializado');
     },
 
     cacheElements() {
         this.container = document.getElementById('customers-view');
     },
 
-    // Renderiza a interface completa
     render() {
         if (!this.container) this.cacheElements();
         if (!this.container) return;
 
-        const customers = this.getFilteredCustomers();
+        const customers = window.Customers_DB ? window.Customers_DB.findAll().reverse() : [];
+
+        const tableRows = customers.length > 0 
+            ? customers.map(customer => this.createCustomerRow(customer)).join('')
+            : '<tr><td colspan="4" class="text-center">Nenhum cliente cadastrado.</td></tr>';
 
         this.container.innerHTML = `
-            <!-- Cabeçalho com título e botões de ação -->
-            <div class="module-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <div class="header-left">
-                    <h1><i class="fas fa-users"></i> Clientes (CRM)</h1>
-                    <div class="subtitle" style="color: var(--text-secondary);">${customers.length} clientes cadastrados</div>
-                </div>
-                <div class="header-actions" style="display: flex; gap: 10px;">
-                    <button class="btn btn-primary" onclick="CustomersModule.openCustomerModal(null)">
-                        <i class="fas fa-plus"></i> Novo Cliente
-                    </button>
-                </div>
+            <div class="section-header">
+                <h1>Clientes (CRM)</h1>
+                <button class="btn btn-primary" onclick="CustomersModule.showCustomerModal()">
+                    + Novo Cliente
+                </button>
             </div>
 
-            <!-- Barra de ferramentas (busca) -->
-            <div class="card" style="padding: 15px; margin-bottom: 20px;">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <input type="text" 
-                           class="form-control"
-                           placeholder="Buscar clientes por nome, telefone ou email..." 
-                           value="${this.searchTerm}"
-                           onkeyup="CustomersModule.handleSearch(event)">
-                </div>
-            </div>
-
-            <!-- Tabela de Clientes -->
             <div class="card">
-                <table class="table">
+                <table class="customers-table">
                     <thead>
                         <tr>
                             <th>Nome</th>
-                            <th>Telefone</th>
+                            <th>Telefone/WhatsApp</th>
                             <th>Email</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${this.renderTableRows(customers)}
+                        ${tableRows}
                     </tbody>
                 </table>
             </div>
 
-            ${this.getModalTemplate()}
+            ${this.createCustomerModal()}
         `;
     },
 
-    renderTableRows(customers) {
-        if (customers.length === 0) {
-            return `<tr><td colspan="4" class="text-center" style="padding: 20px;">Nenhum cliente encontrado.</td></tr>`;
-        }
-
-        return customers.map(customer => `
+    createCustomerRow(customer) {
+        return `
             <tr>
                 <td><strong>${customer.name}</strong></td>
                 <td>${customer.phone}</td>
                 <td>${customer.email || '-'}</td>
                 <td>
-                    <button class="btn btn-sm btn-primary" onclick="CustomersModule.openCustomerModal('${customer.id}')">Editar</button>
-                    <button class="btn btn-sm btn-danger" onclick="CustomersModule.deleteCustomer('${customer.id}')">Excluir</button>
+                    <button class="btn btn-sm btn-danger" onclick="CustomersModule.deleteCustomer('${customer.id}')">
+                        Excluir
+                    </button>
                 </td>
             </tr>
-        `).join('');
+        `;
     },
 
-    getModalTemplate() {
+    createCustomerModal() {
         return `
-            <div id="customer-modal" class="modal">
+            <div id="modal-customer" class="modal">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h2 id="modal-title" class="modal-title">Novo Cliente</h2>
-                        <button class="modal-close" onclick="CustomersModule.closeCustomerModal()">&times;</button>
+                        <h2>Novo Cliente</h2>
+                        <span class="close-modal" onclick="CustomersModule.hideCustomerModal()">&times;</span>
                     </div>
-                    <form id="customer-form" onsubmit="CustomersModule.handleSubmit(event)">
-                        <div class="modal-body">
-                            <input type="hidden" name="id">
-                            <div class="form-group">
-                                <label class="form-label">Nome Completo *</label>
-                                <input type="text" name="name" class="form-control" required placeholder="Ex: João Silva">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Telefone *</label>
-                                <input type="tel" name="phone" class="form-control" required placeholder="(11) 99999-9999">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Email</label>
-                                <input type="email" name="email" class="form-control" placeholder="email@exemplo.com">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Endereço</label>
-                                <textarea name="address" class="form-control" rows="2"></textarea>
-                            </div>
+                    <form onsubmit="CustomersModule.handleSubmit(event)" id="customer-form">
+                        <div class="form-group">
+                            <label>Nome Completo *</label>
+                            <input type="text" name="name" required placeholder="Ex: João Silva" maxlength="100">
                         </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" onclick="CustomersModule.closeCustomerModal()">Cancelar</button>
-                            <button type="submit" class="btn btn-primary">Salvar</button>
+                        <div class="form-group">
+                            <label>Telefone / WhatsApp *</label>
+                            <input type="tel" name="phone" required placeholder="(11) 99999-9999">
                         </div>
+                        <div class="form-group">
+                            <label>Email (Opcional)</label>
+                            <input type="email" name="email" placeholder="cliente@email.com" maxlength="100">
+                        </div>
+                        <div class="form-group">
+                            <label>Endereço (Opcional)</label>
+                            <textarea name="address" rows="2" maxlength="200"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">
+                            Salvar Cliente
+                        </button>
                     </form>
                 </div>
             </div>
         `;
     },
 
-    handleSearch(event) {
-        this.searchTerm = event.target.value.toLowerCase();
-        this.render();
-    },
-
-    getFilteredCustomers() {
-        let customers = window.Customers_DB ? window.Customers_DB.findAll() : [];
-        if (this.searchTerm) {
-            customers = customers.filter(c => 
-                (c.name && c.name.toLowerCase().includes(this.searchTerm)) ||
-                (c.phone && c.phone.includes(this.searchTerm)) ||
-                (c.email && c.email.toLowerCase().includes(this.searchTerm))
-            );
+    showCustomerModal() {
+        const modal = document.getElementById('modal-customer');
+        if(modal) {
+            modal.style.display = 'flex';
+            const form = document.getElementById('customer-form');
+            if(form) form.reset();
         }
-        // Ordenar: mais recentes primeiro
-        return customers.reverse();
     },
 
-    openCustomerModal(customerId) {
-        const modal = document.getElementById('customer-modal');
-        const form = document.getElementById('customer-form');
-        const title = document.getElementById('modal-title');
-        
-        if (customerId) {
-            const customer = window.Customers_DB.findById(customerId);
-            title.textContent = 'Editar Cliente';
-            form.elements.id.value = customer.id;
-            form.elements.name.value = customer.name;
-            form.elements.phone.value = customer.phone;
-            form.elements.email.value = customer.email || '';
-            form.elements.address.value = customer.address || '';
-        } else {
-            title.textContent = 'Novo Cliente';
-            form.reset();
-            form.elements.id.value = '';
-        }
-        
-        modal.style.display = 'flex';
-        modal.classList.add('active');
-    },
-
-    closeCustomerModal() {
-        const modal = document.getElementById('customer-modal');
-        modal.style.display = 'none';
-        modal.classList.remove('active');
+    hideCustomerModal() {
+        const modal = document.getElementById('modal-customer');
+        if(modal) modal.style.display = 'none';
     },
 
     handleSubmit(event) {
         event.preventDefault();
         const form = event.target;
-        const data = {
-            id: form.elements.id.value,
-            name: form.elements.name.value,
-            phone: form.elements.phone.value,
-            email: form.elements.email.value,
-            address: form.elements.address.value
+        
+        const customerData = {
+            name: form.name.value.trim(),
+            phone: form.phone.value.trim(),
+            email: form.email.value.trim() || null,
+            address: form.address.value.trim() || null
         };
 
-        if (data.id) {
-            window.Customers_DB.update(data.id, data);
+        if (window.Customers_DB) {
+            window.Customers_DB.create(customerData);
+            this.hideCustomerModal();
+            this.render();
+            
+            // Atualizar dashboard se disponível
+            if (window.DashboardModule && typeof window.DashboardModule.refreshData === 'function') {
+                window.DashboardModule.refreshData();
+            }
+            
+            this.showNotification('Cliente salvo com sucesso!', 'success');
         } else {
-            delete data.id; // Deixar o DB gerar o ID
-            window.Customers_DB.create(data);
-        }
-        
-        this.closeCustomerModal();
-        this.render();
-        
-        // Atualiza dashboard se possível
-        if (window.DashboardModule && typeof window.DashboardModule.refreshData === 'function') {
-            window.DashboardModule.refreshData();
+            this.showNotification('Erro: Banco de dados não disponível', 'error');
         }
     },
 
     deleteCustomer(id) {
-        if (confirm('Tem certeza que deseja excluir este cliente?')) {
-            window.Customers_DB.delete(id);
-            this.render();
+        if (confirm('Tem certeza que deseja excluir este cliente?\n\nObservação: As ordens de serviço relacionadas não serão removidas.')) {
+            if (window.Customers_DB) {
+                window.Customers_DB.delete(id);
+                this.render();
+                this.showNotification('Cliente excluído!', 'info');
+            }
+        }
+    },
+
+    showNotification(message, type = 'info') {
+        if (window.App && typeof window.App.showNotification === 'function') {
+            window.App.showNotification(message, type);
+        } else {
+            alert(message);
         }
     }
 };
 
-// Exportar globalmente
+// Estilos CSS
+const customerStyles = `
+    <style>
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        
+        .customers-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .customers-table th {
+            background: var(--bg-hover);
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        
+        .customers-table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-light);
+        }
+        
+        .customers-table tr:hover {
+            background: var(--bg-hover);
+        }
+        
+        .btn-block {
+            width: 100%;
+            display: block;
+        }
+    </style>
+`;
+
+document.head.insertAdjacentHTML('beforeend', customerStyles);
+
+// Expor globalmente
 if (typeof window !== 'undefined') {
     window.CustomersModule = CustomersModule;
 }

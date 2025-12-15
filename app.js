@@ -21,6 +21,7 @@ class Application {
             await this.initializeModules();
             
             this.setupGlobalEvents();
+            this.restoreAppState();
             this.setupRouting();
             
             this.isInitialized = true;
@@ -28,6 +29,7 @@ class Application {
             
         } catch (error) {
             console.error('❌ Erro crítico na inicialização:', error);
+            // Mesmo com erro, tentamos liberar a UI para não travar no loading
         } finally {
             // GARANTE que o loading vai sumir
             this.initializeUI();
@@ -218,7 +220,18 @@ class Application {
             notif.remove();
         }, 4000);
     }
+
+    restoreAppState() {
+        // Implementar restauração se necessário
+    }
 }
 
-// Inicializar a instância global, mas NÃO chamar init() aqui. O init.js fará isso.
-window.App = new Application();
+const App = new Application();
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => App.init());
+} else {
+    App.init();
+}
+
+window.App = App;
